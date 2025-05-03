@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Gaze Tracking with Paho MQTT</title>
+    <script src="./webgazer.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.js"></script>
+    <style>
+        .footer {
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #ccc;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="footer">
+        <h2>Gaze Tracking with Eclipse Paho MQTT</h2>
+        <button onclick="downloadCSV()">Download CSV</button>
+        <pre id="status">Connecting...</pre>
+    </div>
+
+    <script>
+        let data = [];
+        const clientID = "gazeClient_" + Math.floor(Math.random() * 10000);
+        const brokerHost = "test.mosquitto.org";
+        const brokerPort = 8081;
+        const topic = "webgazer/stream/monish";
+
+        const client = new Paho.MQTT.Client(brokerHost, brokerPort, "/mqtt", clientID);
+
+        client.onConnectionLost = (responseObject) => {
+            document.getElementById("status").innerText = "Connection lost!";
+            console.error("Connection lost:", responseObject.errorMessage);
+        };
+
+        client.onMessageDelivered = (message) => {
+            console.log("Message sent:", message.payloadString);
+        };
+
+        client.connect({
+            useSSL: true,
+            onSuccess: () => {
+                document.getElementById("status").innerText = "Connected to MQTT (Paho)";
+                startWebGazer();
+            },
+            onFailure: (e) => {
+                document.getElementById("status").innerText = "Connection failed!";
+                console.error("MQTT connection failed:", e);
+            }
+        });
+
+        function startWebGazer() {
+            webgazer.setGazeListener((dataPoint, timestamp) => {
+                if (dataPoint) {
+                    const point = {
+                        x: dataPoint.x,
+                        y: dataPoint.y,
+                        timestamp: timestamp || Date.now()
+                    };
+                    data.push(point);
+
+                    const message = new Paho.MQTT.Message(JSON.stringify(point));
+                    message.destinationName = topic;
+                    client.send(message);
+                }
+            }).begin();
+        }
+
+        function downloadCSV() {
+            const header = "x,y,timestamp\n";
+            const rows = data.map(d => `${d.x},${d.y},${d.timestamp}`).join("\n");
+            const blob = new Blob([header + rows], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = "gaze_data.csv";
+            a.click();
+        }
+    </script>
+</body>
+
+</html>
